@@ -2,28 +2,36 @@ using System.ComponentModel.DataAnnotations;
 using System.Drawing.Text;
 using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using static System.Collections.Specialized.BitVector32;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Dynamic_Calculator
 {
     //ToDo: 1.implement variable solve mode
-    
-    
+
+
     public partial class Form1 : Form
     {
-        //should be plenty of memory
-        //for most complex math problems
+
+        //class variables for evaluation mode
         double[,] numbers = new double[2, 50];
-        int[]negatives = new int[50];
+
+        int[] negatives = new int[50];
         int[,] parenteses = new int[2, 20];
         int numberOfParenteses = 0;
         int numberOfNegatives = 0;
         int numberOfSigns = 0;
+        int numberOfVars = 0;
 
         string[,] signs = new string[2, 30];
-        string letters = "";
 
-        //solveMode is disabled for now
+        //class variables for solve mode
         bool solveMode = false;
+        bool containsEquals = false;
+        string[,] terms = new string[2, 10];
+        int numberOfTerms = 0;
 
         public Form1()
         {
@@ -38,20 +46,36 @@ namespace Dynamic_Calculator
             amend string as necessary to reflect state for next operation accuracy. Continue until only the answer remains.\
          4. Output answer to user
         */
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            this.Size = new Size(418, 482);
+        }
 
         private void btnProcess_Click(object sender, EventArgs e)
         {
+            lstHistory.Items.Clear();
+            solveMode = false;
             string noParenteses = "";
             string input = txtInput.Text.Trim();
-            if(input != "")
+            if (input != "")
             {
                 string processedInput = InitialProcessInput(input); //string cleanup
-                GetParenteses(processedInput); //find out where parenteses are, if any
-                noParenteses = numberOfParenteses > 1 ? ProcessParenteses(processedInput) : ""; //skip if no parenteses               
-                noParenteses = numberOfParenteses == 1 ? RemoveExtraParentese(noParenteses) : noParenteses; //remove extra if neccessary
-                processedInput = noParenteses == "" ? processedInput : noParenteses; //update output string with post-parenteses value, if necessary
-                string value = EvaluateString(processedInput); //evaluate final string
-                lblOutput.Text = value.ToString(); //output to user
+                if (solveMode == true)
+                {
+                    solve(processedInput);
+                }
+                else
+                {
+                    processedInput = RefreshStringData(processedInput); //find out where parenteses are, if any
+                    noParenteses = numberOfParenteses > 1 ? ProcessParenteses(processedInput) : ""; //skip if no parenteses               
+                    noParenteses = numberOfParenteses == 1 ? RemoveExtraParentese(noParenteses) : noParenteses; //remove extra if neccessary
+                    processedInput = noParenteses == "" ? processedInput : noParenteses; //update output string with post-parenteses value, if necessary
+                    string value = EvaluateString(processedInput); //evaluate final string
+                    lstHistory.Items.Add(value.ToString());
+                    txtOutput.Text = value.ToString(); //output to user
+                }
+
+
             }
             else
             {
@@ -64,25 +88,6 @@ namespace Dynamic_Calculator
          ******************************************************************************************/
         private string InitialProcessInput(string input)
         {
-
-            /*
-             * finds out how many letters are present. If there is one letter, the program will consider it to be a variable it must solve for.
-             * If there is more than one, it will consider them to be errors and remove them all. This needs to be done first to
-             * stop the program from misinterpreting an expression
-             */
-
-            for (int i = 0; i < input.Length; i++)
-            {
-                if (IsThisALetter(input[i]) == true)
-                {
-                    letters += input[i];
-                }
-            }
-            if (letters.Length > 1)
-            {
-                input = RemoveLetters(input);
-            }
-
             //remove spaces and unwanted chars such as punctuation, etc
             int length = input.Length;
             for (int i = 0; i < length; i++)
@@ -94,6 +99,29 @@ namespace Dynamic_Calculator
                     length--;
                 }
             }
+            /**************************************************************************************************************************************
+             * finds out how many letters are present. If there is one letter, the program will consider it to be a variable it must solve for.
+             * If there is more than one, it will consider them to be errors and remove them all.
+             **************************************************************************************************************************************/
+
+            string letters = "";
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (IsThisALetter(input[i]))
+                {
+                    letters += input[i];
+                }
+            }
+            if (letters != "")
+            {
+                input = AreAllLettersTheSame(letters) == false ? RemoveLetters(input) : input;
+                solveMode = true;
+            }
+            else
+            {
+                solveMode = false;
+            }
+            lstHistory.Items.Add(input);
             return input;
         }
 
@@ -105,16 +133,29 @@ namespace Dynamic_Calculator
             int length = input.Length;
             for (int i = 0; i < length - 2; i++) //avoid checking final char
             {
-                if (IsThisAnOperator(input[i]) == true && IsThisAnOperator(input[i + 1]) == true &&
+                if (IsThisAnOperator(input[i]) == true && IsThisAnOperator(input[i + 1]) == true && //dont count parenteses
                     IsThisAParentese(input[i]) == false && IsThisAParentese(input[i + 1]) == false)
                 {
-                    if (input[i + 1].ToString() == "-")
+                    if (input[i + 1].ToString() == "-" && input[i].ToString() != "-")
                     {
                         if (i == 0)
                         {
                             input = input.Substring(1);
                             i--;
                             length--;
+                        }
+                    }
+                    else if (input[i + 1].ToString() == "-" && input[i].ToString() == "-")
+                    {
+                        if (i == 0)
+                        {
+                            input = input.Substring(2);
+                            length -= 2;
+                            i--;
+                        }
+                        else
+                        {
+                            input = input.Substring(0, i) + "+" + input.Substring(i + 2);
                         }
                     }
                     else
@@ -145,6 +186,7 @@ namespace Dynamic_Calculator
         /******************************************************************************************
          *                             Methods that deal with parenteses
          ******************************************************************************************/
+
         private void GetParenteses(string input)
         {
             //store Parenteses Indexes in memory, as well as what type they are
@@ -171,21 +213,26 @@ namespace Dynamic_Calculator
         private string ProcessParenteses(string input)
         {
             int i = 0;
-            while(numberOfParenteses > 1)
+            while (numberOfParenteses > 1)
             {
                 if (parenteses[1, i] == 0 && parenteses[1, i + 1] == 1)
                 {
                     string value = EvaluateString(input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1));
-                    value = IsThisADigit(input[parenteses[0, i] - 1]) ? "*" + value : value; //if parenteses value is multiplied by previous number w/o sign, insert multiplication
+                    input = RefreshStringData(input);
+                    if (parenteses[0, i] != 0) //dont check previous char if open parentese is first char in string
+                    {
+                        value = IsThisADigit(input[parenteses[0, i] - 1]) ? "*" + value : value; //if parenteses value is multiplied by previous number w/o sign, insert multiplication
+                    }
                     input = parenteses[0, i + 1] == input.Length - 1 ? input.Substring(0, parenteses[0, i]) + value.ToString() :
                         input.Substring(0, parenteses[0, i]) + value.ToString() + input.Substring(parenteses[0, i + 1] + 1);
-                    GetParenteses(input);
+                    input = RefreshStringData(input);
+                    lstHistory.Items.Add(input);
                     i = 0; //restart loop every time we process a set of parenteses. This is to deal with nested Parenteses.
                 }
                 else
                 {
                     i++; //check next set
-                }          
+                }
             }
             return input;
         }
@@ -193,7 +240,7 @@ namespace Dynamic_Calculator
         //if uneven number of parenteses, this will remove the one that remains
         private string RemoveExtraParentese(string input)
         {
-            for(int i = 0; i < input.Length; i++)
+            for (int i = 0; i < input.Length; i++)
             {
                 input = IsThisAParentese(input[i]) ? input.Substring(0, i) + input.Substring(i + 1) : input;
             }
@@ -203,8 +250,9 @@ namespace Dynamic_Calculator
         /******************************************************************************************
          *                             Methods that store things in memory
          ******************************************************************************************/
-        //identify negative numbers
-        private void FindNegativeNumbers(string input)
+
+        //identify and store negative numbers
+        private void GetNegativeTerms(string input)
         {
             Array.Clear(negatives);
             numberOfNegatives = 0;
@@ -219,7 +267,7 @@ namespace Dynamic_Calculator
             }
             for (int i = 2; i <= input.Length - 1; i++)
             {
-                if (IsThisADigit(input[i]) == true && input[i - 1].ToString() == "-" && IsThisAnOperator(input[i - 2]) == true)
+                if ((IsThisADigit(input[i]) || IsThisALetter(input[i])) && input[i - 1].ToString() == "-" && IsThisAnOperator(input[i - 2]) == true)
                 {
                     negatives[numberOfNegatives] = i; //store index of number that is negative
                     numberOfNegatives++;
@@ -235,8 +283,8 @@ namespace Dynamic_Calculator
             int numberIndex = 0;
             for (int i = 0; i < input.Length; i++)
             {
-                bool isDigit = IsThisADigit(input[i]);
-                if (isDigit == true)
+                bool isNumber = IsThisADigit(input[i]);
+                if (isNumber == true)
                 {
                     number += input[i];
 
@@ -266,57 +314,145 @@ namespace Dynamic_Calculator
         {
             numberOfSigns = 0;
             Array.Clear(signs);
-            for(int i = 1; i < input.Length; i++)
+            for (int i = 1; i < input.Length; i++)
             {
                 if (IsThisAnOperator(input[i]) == true)
                 {
-                    if ((input[i].ToString() != "-" || (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)) &&
-                        IsThisAParentese(input[i]) == false)
+                    if ((input[i].ToString() != "-" && input[i].ToString() != "=" && IsThisAParentese(input[i]) == false) ||
+                        (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)) ; //dont add - to operator list if it represnts a negative number
                     {
                         signs[0, numberOfSigns] = input[i].ToString();
                         signs[1, numberOfSigns] = i.ToString();
                         numberOfSigns++;
-                    }    
+                    }
                 }
             }
         }
 
+        //fix negtives and p
         private string RefreshStringData(string input)
+        {
+            input = RemoveDuplicateOperators(input);
+
+            Array.Clear(numbers);
+            Array.Clear(signs);
+            Array.Clear(parenteses);
+            Array.Clear(negatives);
+
+            numberOfNegatives = 0;
+            numberOfSigns = 0;
+            numberOfParenteses = 0;
+
+            string number = "";
+            int numberIndex = 0;
+
+            if (input[0].ToString() == "-")
+            {
+                negatives[0] = 1; //if first char is -, first number must be negative
+                numberOfNegatives++;
+            }
+
+            for (int i = 0; i < input.Length; i++)
+            {
+                //store operators in order, skipping = and any - that represent negative numbers
+                if (IsThisAnOperator(input[i]) && i > 0)
+                {
+                    if ((input[i].ToString() != "-" && input[i].ToString() != "=" && IsThisAParentese(input[i]) == false) ||
+                        (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)) ; //dont add - to operator list if it represents a negative number
+                    {
+                        signs[0, numberOfSigns] = input[i].ToString();
+                        signs[1, numberOfSigns] = i.ToString();
+                        numberOfSigns++;
+                    }
+                }
+
+                if (input[i].ToString() == "(")
+                {
+                    parenteses[0, numberOfParenteses] = i;
+                    parenteses[1, numberOfParenteses] = 0; //0 = open, 1 = close - keeps track of which kind each is
+                    numberOfParenteses++;
+                }
+                if (input[i].ToString() == ")")
+                {
+                    parenteses[0, numberOfParenteses] = i;
+                    parenteses[1, numberOfParenteses] = 1; //0 = open, 1 = close - keeps track of which kind each is
+                    numberOfParenteses++;
+                }
+
+                if (IsThisADigit(input[i]))
+                {
+                    number += input[i];
+
+                    if (i == input.Length - 1)
+                    {
+                        numbers[0, numberIndex] = double.Parse(number);
+                        numbers[1, numberIndex] = i - (number.Length - 1);
+                        numberIndex++;
+                        number = "";
+                    }
+                }
+                else
+                {
+                    if (i != 0 && number != "")
+                    {
+                        numbers[0, numberIndex] = double.Parse(number);
+                        numbers[1, numberIndex] = i - (number.Length);
+                        numberIndex++;
+                        number = "";
+                    }
+                }
+
+
+                if (i > 1 && i < input.Length)
+                {
+                    if ((IsThisADigit(input[i]) || IsThisALetter(input[i])) && input[i - 1].ToString() == "-" && IsThisAnOperator(input[i - 2]) == true)
+                    {
+                        negatives[numberOfNegatives] = i; //store index of negative number
+                        numberOfNegatives++;
+                    }
+                }
+            }
+            return input;
+        }
+
+        //replaced with RefreshStringData for efficiency, kept around just in case
+        private string RefreshEvaluationData(string input)
         {
             input = RemoveDuplicateOperators(input);
             GetOperators(input);
             GetNumbers(input);
-            FindNegativeNumbers(input);
+            GetNegativeTerms(input);
             return input;
         }
 
         /******************************************************************************************
-         *                             Methods that process strings portions
+         *                             Methods that process string portions
          ******************************************************************************************/
 
         //respect order of operations PEMDAS (P taken care of already, will reference this method to evaluate contents
         private string EvaluateString(string input)
         {
-            RefreshStringData(input);            
+            //RefreshEvaluationData(input);
+            input = RefreshStringData(input);
             input = EvaluateExpression(input, "^");
             input = EvaluateExpression(input, "*");
-            input = EvaluateExpression(input, "/");
             input = EvaluateExpression(input, "+");
-            input = EvaluateExpression(input, "-");
             return input;
         }
 
         //where the magic happens
-        //horribly inefficient atm, clean up after project works
+        //horribly inefficient atm, need to sort operators into arrays and iterate those instead
         private string EvaluateExpression(string input, string op)
         {
+            string opop = InvertOperation(op);
+            string previous = input;
             double result = 0;
             string value = "";
             int operations = numberOfSigns;
             int tracker = 0;
             for (int i = 0; i < operations; i++)
             {
-                if (signs[0, tracker] == op && signs[1, tracker] != "0") //avoid counting negatives at front of expression
+                if ((signs[0, tracker] == op || signs[0, tracker] == opop) && signs[1, tracker] != "0") //avoid counting negatives at front of expression
                 {
                     double a = numbers[0, tracker];
                     double b = numbers[0, tracker + 1];
@@ -331,19 +467,34 @@ namespace Dynamic_Calculator
                         a = negatives[j] == aIndex ? -a : a;
                         b = negatives[j] == bIndex ? -b : b;
                     }
-                    result = DoMath(a, b, op);
-                    value = result < 0 ? value = "-" + result.ToString() : value = result.ToString();
-                    input = bIndex + bL >= input.Length ? input.Substring(0, aIndex) + value : 
+
+                    result = DoMath(a, b, signs[0, tracker]);
+                    value = result.ToString();
+
+                    if (tracker == 0) //avoid including anything before first number/operater pair as rollover
+                    {
+                        input = bIndex + bL >= input.Length ? value : value + input.Substring(bIndex + bL);
+                    }
+                    else
+                    {
+                        input = bIndex + bL >= input.Length ? input.Substring(0, aIndex) + value :
                         input.Substring(0, aIndex) + value + input.Substring(bIndex + bL);
+                    }
+
                     input = RefreshStringData(input); //refresh for next loop iteration
                 }
                 else
                 {
                     tracker++;
-                }            
+                }
+            }
+            if (previous != input && numberOfSigns != 0)
+            {
+                lstHistory.Items.Add(input);
             }
             return input;
         }
+
         //if exponent calculation, b should be the exponent
         private double DoMath(double a, double b, string op)
         {
@@ -372,11 +523,31 @@ namespace Dynamic_Calculator
             return total;
         }
 
+        private string ReverseString(string input)
+        {
+            string newString = "";
+            for (int i = input.Length - 1; i >= 0; i--)
+            {
+                newString += input[i];
+            }
+            return newString;
+        }
+
         /******************************************************************************************
          *                             Methods that identify characters
          ******************************************************************************************/
-
-
+        private bool AreAllLettersTheSame(string letters)
+        {
+            bool areSame = false;
+            for (int i = 0; i < letters.Length - 1; i++)
+            {
+                if (IsThisALetter(letters[i]) && IsThisALetter(letters[i + 1]))
+                {
+                    areSame = letters[i].ToString().ToUpper() == letters[i + 1].ToString().ToUpper() ? true : areSame;
+                }
+            }
+            return areSame;
+        }
         private bool IsThisADigit(char input)
         {
             bool isDigit = false;
@@ -392,7 +563,7 @@ namespace Dynamic_Calculator
         {
             bool isLetter = false;
             string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-            foreach(char character in letters)
+            foreach (char character in letters)
             {
                 if (input.ToString().ToUpper() == character.ToString())
                 {
@@ -407,7 +578,7 @@ namespace Dynamic_Calculator
         {
             bool isOperator = false;
             string operators = "()^*/+-=";
-            foreach(char character in operators)
+            foreach (char character in operators)
             {
                 isOperator = input == character ? true : isOperator;
             }
@@ -417,17 +588,293 @@ namespace Dynamic_Calculator
         private bool IsThisAParentese(char input)
         {
             bool isP = false;
-            if(input.ToString() == "(" || input.ToString() == ")")
+            if (input.ToString() == "(" || input.ToString() == ")")
             {
                 isP = true;
             }
             return isP;
         }
 
+        private bool IsThisAnEquals(char input)
+        {
+            bool isEquals = input.ToString() == "=" ? true : false;
+            return isEquals;
+        }
+
+        private bool IsThisAnExponent(char input)
+        {
+            bool isExp = input.ToString() == "^" ? true : false;
+            return isExp;
+        }
+
         /******************************************************************************************
          *                             Methods that deal with variable solving
          ******************************************************************************************/
+        private void FindVariables(string input)
+        {
+            string mem = "";
+            int varCounter = 0;
+            Array.Clear(terms);
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (IsThisALetter(input[i]))
+                {
+                    mem += input[i];
+                    for (int j = i - 1; j >= 0; j--)
+                    {
+                        if (IsThisALetter(input[j]) || IsThisADigit(input[j]))
+                        {
+                            mem += input[j];
+                            if (j == 0 && mem != "")
+                            {
+                                mem = ReverseString(mem);
+                                terms[0, varCounter] = mem;
+                                terms[1, varCounter] = j.ToString();
+                                mem = "";
+                                varCounter++;
+                                j = -1; //exit inner loop
+                            }
+                        }
+                        else
+                        {
+                            mem = ReverseString(mem);
+                            terms[0, varCounter] = mem;
+                            terms[1, varCounter] = j.ToString();
+                            mem = "";
+                            varCounter++;
+                            j = -1; //exit inner loop
+                        }
+                    }
+                }
+            }
+        }
+
+        private void GetTerms(string input)
+        {
+            Array.Clear(terms);
+            string term = "";
+            numberOfTerms = 0;
+            for (int i = 0; i < input.Length; i++)
+            {
+                bool isNumber = IsThisADigit(input[i]) || IsThisALetter(input[i]) || IsThisAnExponent(input[i]);
+                if (isNumber == true)
+                {
+                    term += input[i];
+
+                    if (i == input.Length - 1)
+                    {
+                        terms[0, numberOfTerms] = term;
+                        terms[1, numberOfTerms] = (i - (term.Length - 1)).ToString();
+                        numberOfTerms++;
+                        term = "";
+                    }
+                }
+                else
+                {
+                    if (i != 0 && term != "")
+                    {
+                        terms[0, numberOfTerms] = term;
+                        terms[1, numberOfTerms] = (i - (term.Length)).ToString();
+                        numberOfTerms++;
+                        term = "";
+                    }
+                }
+            }
+        }
 
 
+        //split equation into two strings based on position of Equals
+        private string InitialProcessEquation(string input)
+        {
+            //ensure there is only one equal sign before split. If none, add one at end.
+            int equals = HowManyEquals(input);
+
+            if (equals > 1)
+            {
+                input = RemoveMultipleEquals(input);
+                equals = 1;
+            }
+
+            input = equals == 1 ? input + "=0" : input;
+            input = RefreshEquationData(input);
+
+            //remove or simplify all parenteses
+            GetParenteses(input);
+            if (numberOfParenteses > 1)
+            {
+                input = EquationParenteses(input);
+            }
+            if (numberOfParenteses == 1)
+            {
+                input = RemoveExtraParentese(input);
+            }
+
+            return input;
+        }
+
+        //test this when done :) 
+        private string EquationParenteses(string input)
+        {
+            int i = 0;
+            while (numberOfParenteses > 1)
+            {
+                if (parenteses[1, i] == 0 && parenteses[1, i + 1] == 1)
+                {
+                    int newStart = 0;
+                    string mem = "";
+                    string expression = input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1);
+                    expression = SimplifyExpression(expression);
+                    if (IsThisADigit(input[parenteses[0, 1] - 1]) || IsThisALetter(input[parenteses[0, 1] - 1]))
+                    {
+                        for (int j = parenteses[0, 1] - 1; j >= 0; j--)
+                        {
+                            if (IsThisAnOperator(input[j]) == false)
+                            {
+                                mem += input[j];
+                            }
+                            else
+                            {
+                                newStart = j + 1;
+                                j = -1; //break loop when encounter end of term
+                            }
+                        }
+                        if (mem != "")
+                        {
+                            mem = ReverseString(mem);
+                            expression = DistributeFactor(mem, expression);
+                        }
+                        input = parenteses[0, i + 1] == input.Length - 1 ? input.Substring(0, newStart) + expression :
+                            input.Substring(0, newStart) + expression + input.Substring(parenteses[0, i + 1] + 1);
+                        GetParenteses(input);
+                        i = 0;
+                    }
+                    else
+                    {
+                        input = parenteses[0, i + 1] == input.Length - 1 ? input.Substring(0, parenteses[0, i]) + expression :
+                            input.Substring(0, parenteses[0, i]) + expression.ToString() + input.Substring(parenteses[0, i + 1] + 1);
+                        GetParenteses(input);
+                        i = 0; //restart loop every time we process a set of parenteses. This is to deal with nested Parenteses.
+                    }
+                }
+                else
+                {
+                    i++; //check next set
+                }
+            }
+            return input;
+        }
+
+        private string SimplifyExpression(string input)
+        {
+            input = RefreshEquationData(input);
+
+            return input;
+        }
+
+        //does not account for exponents at the moment. 
+        private string SeparateTerm(string term)
+        {
+            string number = "";
+            string letter = "";
+            foreach (char character in term)
+            {
+                letter = IsThisALetter(character) ? letter += character : letter;
+                number = IsThisADigit(character) ? number += character : number;
+            }
+            term = number + "," + letter;
+            return term;
+        }
+
+        private string RemoveMultipleEquals(string input)
+        {
+            int Equals = 0;
+            int length = input.Length;
+            for (int i = length - 1; i >= 0; i++)
+            {
+                if (IsThisAnEquals(input[i]))
+                {
+                    Equals++;
+                }
+                if (Equals > 1)
+                {
+                    input = input.Remove(i, 1);
+                    Equals--;
+                }
+            }
+            return input;
+        }
+
+        private int HowManyEquals(string input)
+        {
+            int a = 0;
+            for (int i = 0; i < input.Length; i++)
+            {
+                if (IsThisAnEquals(input[i]))
+                {
+                    a++;
+                }
+            }
+            return a;
+        }
+
+        private void solve(string input)
+        {
+            string[] sections;
+            input = InitialProcessEquation(input);
+            sections = input.Split("=");
+
+
+        }
+
+        private string RefreshEquationData(string input)
+        {
+
+            return input;
+        }
+
+        private string InvertOperation(string op)
+        {
+            switch (op)
+            {
+                case "+":
+                    op = "-";
+                    break;
+                case "-":
+                    op = "+";
+                    break;
+                case "*":
+                    op = "/";
+                    break;
+                case "/":
+                    op = "*";
+                    break;
+                case "^":
+                    op = "^";
+                    break;
+            }
+            return op;
+        }
+
+        private string DistributeFactor(string mult1, string mult2)
+        {
+            string sep = SeparateTerm(mult1);
+            string[] separated = sep.Split(",");
+            double numberFactor = double.Parse(separated[0]);
+            string letterFactor = separated[1];
+
+            GetTerms(mult2);
+            GetOperators(mult2);
+
+            string result = "";
+            return result;
+        }
+
+        private void btnTest_Click(object sender, EventArgs e)
+        {
+            string test = RefreshStringData("2+(9*2)");
+            MessageBox.Show(parenteses[0, 0].ToString() + " " + parenteses[0, 1].ToString() + "\n " + numbers[0, 0].ToString() + "\n " + numberOfNegatives.ToString());
+        }
+
+        
     }
 }
