@@ -20,17 +20,24 @@ namespace Dynamic_Calculator
 
         int[] negatives = new int[50];
         int[,] parenteses = new int[2, 20];
+        
         int numberOfParenteses = 0;
         int numberOfNegatives = 0;
         int numberOfSigns = 0;
+        int numberOfExp = 0;
+        int numberOfMultDiv = 0;
+        int numberOfAddSubtract = 0;
         int numberOfVars = 0;
 
         string[,] signs = new string[2, 30];
+        string[,] multDiv = new string[2, 30];
+        string[,] addSubtract = new string[2, 30];
+        string[,] exp = new string[2, 30];
 
         //class variables for solve mode
         bool solveMode = false;
         bool containsEquals = false;
-        string[,] terms = new string[2, 10];
+        string[,] terms = new string[2, 20];
         int numberOfTerms = 0;
 
         public Form1()
@@ -43,7 +50,7 @@ namespace Dynamic_Calculator
          1. Get and cleanup input string - remove letters, invalid charcaters, etc
          2. Identify portions inside parenteses () and evaluate their contents, modifying original string to reflect the changes
          3. When there are no more parenteses, the string is ready for final processing. Systemically perform math operations and
-            amend string as necessary to reflect state for next operation accuracy. Continue until only the answer remains.\
+            amend string as necessary to reflect state for next operation accuracy. Continue until only the answer remains.
          4. Output answer to user
         */
         private void Form1_Load(object sender, EventArgs e)
@@ -70,8 +77,7 @@ namespace Dynamic_Calculator
                     noParenteses = numberOfParenteses > 1 ? ProcessParenteses(processedInput) : ""; //skip if no parenteses               
                     noParenteses = numberOfParenteses == 1 ? RemoveExtraParentese(noParenteses) : noParenteses; //remove extra if neccessary
                     processedInput = noParenteses == "" ? processedInput : noParenteses; //update output string with post-parenteses value, if necessary
-                    string value = EvaluateString(processedInput); //evaluate final string
-                    lstHistory.Items.Add(value.ToString());
+                    string value = EvaluateExpression2(processedInput, false); //evaluate final string
                     txtOutput.Text = value.ToString(); //output to user
                 }
 
@@ -121,7 +127,7 @@ namespace Dynamic_Calculator
             {
                 solveMode = false;
             }
-            lstHistory.Items.Add(input);
+            lstHistory.Items.Add("Initial Input: " + input);
             return input;
         }
 
@@ -217,7 +223,7 @@ namespace Dynamic_Calculator
             {
                 if (parenteses[1, i] == 0 && parenteses[1, i + 1] == 1)
                 {
-                    string value = EvaluateString(input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1));
+                    string value = EvaluateExpression2(input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1), true);
                     input = RefreshStringData(input);
                     if (parenteses[0, i] != 0) //dont check previous char if open parentese is first char in string
                     {
@@ -319,7 +325,7 @@ namespace Dynamic_Calculator
                 if (IsThisAnOperator(input[i]) == true)
                 {
                     if ((input[i].ToString() != "-" && input[i].ToString() != "=" && IsThisAParentese(input[i]) == false) ||
-                        (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)) ; //dont add - to operator list if it represnts a negative number
+                        (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)); //dont add - to operator list if it represnts a negative number
                     {
                         signs[0, numberOfSigns] = input[i].ToString();
                         signs[1, numberOfSigns] = i.ToString();
@@ -327,9 +333,10 @@ namespace Dynamic_Calculator
                     }
                 }
             }
+            SortOperators();
         }
 
-        //fix negtives and p
+        //update all string data at once
         private string RefreshStringData(string input)
         {
             input = RemoveDuplicateOperators(input);
@@ -402,7 +409,6 @@ namespace Dynamic_Calculator
                     }
                 }
 
-
                 if (i > 1 && i < input.Length)
                 {
                     if ((IsThisADigit(input[i]) || IsThisALetter(input[i])) && input[i - 1].ToString() == "-" && IsThisAnOperator(input[i - 2]) == true)
@@ -412,52 +418,79 @@ namespace Dynamic_Calculator
                     }
                 }
             }
+            SortOperators();
             return input;
         }
 
-        //replaced with RefreshStringData for efficiency, kept around just in case
-        private string RefreshEvaluationData(string input)
+        private void SortOperators()
         {
-            input = RemoveDuplicateOperators(input);
-            GetOperators(input);
-            GetNumbers(input);
-            GetNegativeTerms(input);
-            return input;
+            numberOfExp = 0;
+            numberOfMultDiv = 0;
+            numberOfAddSubtract = 0;
+            for(int i = 0; i < numberOfSigns; i++)
+            {
+                switch (signs[0, i])
+                {
+                    case "^":
+                        exp[0, numberOfExp] = "^";
+                        exp[1, numberOfExp] = i.ToString(); ;
+                        numberOfExp++;
+                        break;
+                    case "*":
+                    case "/":
+                        multDiv[0, numberOfMultDiv] = signs[0, i];
+                        multDiv[1, numberOfMultDiv] = i.ToString(); ;
+                        numberOfMultDiv++;
+                        break;
+                    case "+":
+                    case "-":
+                        addSubtract[0, numberOfAddSubtract] = signs[0, i];
+                        addSubtract[1, numberOfAddSubtract] = i.ToString();
+                        numberOfAddSubtract++;
+                        break;
+
+                }
+            }
         }
+
 
         /******************************************************************************************
          *                             Methods that process string portions
          ******************************************************************************************/
-
-        //respect order of operations PEMDAS (P taken care of already, will reference this method to evaluate contents
-        private string EvaluateString(string input)
+        //A work in progress. Currently can have index out of bounds exception when parenteses are used
+        private string EvaluateExpression2(string input, bool parentesesPortion)
         {
-            //RefreshEvaluationData(input);
             input = RefreshStringData(input);
-            input = EvaluateExpression(input, "^");
-            input = EvaluateExpression(input, "*");
-            input = EvaluateExpression(input, "+");
-            return input;
-        }
-
-        //where the magic happens
-        //horribly inefficient atm, need to sort operators into arrays and iterate those instead
-        private string EvaluateExpression(string input, string op)
-        {
-            string opop = InvertOperation(op);
+            int loopLimit = 0;
             string previous = input;
-            double result = 0;
-            string value = "";
-            int operations = numberOfSigns;
-            int tracker = 0;
-            for (int i = 0; i < operations; i++)
+            string Parenteses = parentesesPortion ? $"({input})" : "";
+            string[,] operators = new string[2, 50];
+            for (int k = 0; k < 3; k++)
             {
-                if ((signs[0, tracker] == op || signs[0, tracker] == opop) && signs[1, tracker] != "0") //avoid counting negatives at front of expression
+                switch (k)
                 {
-                    double a = numbers[0, tracker];
-                    double b = numbers[0, tracker + 1];
-                    int aIndex = (int)numbers[1, tracker];
-                    int bIndex = (int)numbers[1, tracker + 1];
+                    case 0:
+                        loopLimit = numberOfExp;
+                        operators = exp;
+                        break;
+                    case 1:
+                        loopLimit = numberOfMultDiv;
+                        operators = multDiv;
+                        break;
+                    case 2:
+                        loopLimit = numberOfAddSubtract;
+                        operators = addSubtract;
+                        break;
+                }
+                for (int i = 0; i < loopLimit; i++)
+                {
+                    string result;
+                    string op = operators[0, i];
+
+                    double a = numbers[0, int.Parse(operators[1, i])];
+                    double b = numbers[0, int.Parse(operators[1, i]) + 1];
+                    int aIndex = (int)numbers[1, int.Parse(operators[1, i])];
+                    int bIndex = (int)numbers[1, int.Parse(operators[1, i]) + 1];
                     int aL = a.ToString().Length;
                     int bL = b.ToString().Length;
 
@@ -468,32 +501,31 @@ namespace Dynamic_Calculator
                         b = negatives[j] == bIndex ? -b : b;
                     }
 
-                    result = DoMath(a, b, signs[0, tracker]);
-                    value = result.ToString();
-
-                    if (tracker == 0) //avoid including anything before first number/operater pair as rollover
+                    result = DoMath(a, b, op).ToString();
+                    if (int.Parse(operators[1, i]) == 0) //avoid including anything before first number/operater pair as rollover
                     {
-                        input = bIndex + bL >= input.Length ? value : value + input.Substring(bIndex + bL);
+                        input = bIndex + bL >= input.Length ? result : result + input.Substring(bIndex + bL);
                     }
                     else
                     {
-                        input = bIndex + bL >= input.Length ? input.Substring(0, aIndex) + value :
-                        input.Substring(0, aIndex) + value + input.Substring(bIndex + bL);
+                        input = bIndex + bL >= input.Length ? input.Substring(0, aIndex) + result :
+                        input.Substring(0, aIndex) + result + input.Substring(bIndex + bL);
                     }
-
                     input = RefreshStringData(input); //refresh for next loop iteration
+                    string label = numberOfSigns > 0 ? "Expression: " : "Answer: ";
+                    string mem = parentesesPortion ? "Parenteses: " + Parenteses + " = " + input : label + input;
+
+                    if (input != previous && numberOfParenteses < 2)
+                    {
+                        lstHistory.Items.Add(mem);
+                    }
+                    i--;
+                    loopLimit--;
                 }
-                else
-                {
-                    tracker++;
-                }
-            }
-            if (previous != input && numberOfSigns != 0)
-            {
-                lstHistory.Items.Add(input);
             }
             return input;
         }
+
 
         //if exponent calculation, b should be the exponent
         private double DoMath(double a, double b, string op)
@@ -771,17 +803,28 @@ namespace Dynamic_Calculator
             return input;
         }
 
-        //does not account for exponents at the moment. 
         private string SeparateTerm(string term)
         {
             string number = "";
+            string exp = "";
             string letter = "";
+            bool firstNumber = false;
+            bool exponent = false;
             foreach (char character in term)
             {
+                if (firstNumber)
+                {
+                    exp = IsThisADigit(character) ? exp += character : number;
+                }
+                else
+                {
+                    number = IsThisADigit(character) ? number += character : number;
+                }
                 letter = IsThisALetter(character) ? letter += character : letter;
-                number = IsThisADigit(character) ? number += character : number;
+                firstNumber = letter != "" ? true : false;
+                exponent = IsThisAnExponent(character) ? true : exponent;
             }
-            term = number + "," + letter;
+            term = exponent ? number + "," + letter + "," + exp : number + "," + letter;
             return term;
         }
 
