@@ -77,7 +77,7 @@ namespace Dynamic_Calculator
                     noParenteses = numberOfParenteses > 1 ? ProcessParenteses(processedInput) : ""; //skip if no parenteses               
                     noParenteses = numberOfParenteses == 1 ? RemoveExtraParentese(noParenteses) : noParenteses; //remove extra if neccessary
                     processedInput = noParenteses == "" ? processedInput : noParenteses; //update output string with post-parenteses value, if necessary
-                    string value = EvaluateExpression2(processedInput, false); //evaluate final string
+                    string value = EvaluateExpression(processedInput, false); //evaluate final string
                     txtOutput.Text = value.ToString(); //output to user
                 }
 
@@ -223,7 +223,7 @@ namespace Dynamic_Calculator
             {
                 if (parenteses[1, i] == 0 && parenteses[1, i + 1] == 1)
                 {
-                    string value = EvaluateExpression2(input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1), true);
+                    string value = EvaluateExpression(input.Substring(parenteses[0, i] + 1, parenteses[0, i + 1] - parenteses[0, i] - 1), true);
                     input = RefreshStringData(input);
                     if (parenteses[0, i] != 0) //dont check previous char if open parentese is first char in string
                     {
@@ -322,10 +322,30 @@ namespace Dynamic_Calculator
             Array.Clear(signs);
             for (int i = 1; i < input.Length; i++)
             {
-                if (IsThisAnOperator(input[i]) == true)
+                if (IsThisAnOperator(input[i]))
                 {
                     if ((input[i].ToString() != "-" && input[i].ToString() != "=" && IsThisAParentese(input[i]) == false) ||
                         (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)); //dont add - to operator list if it represnts a negative number
+                    {
+                        signs[0, numberOfSigns] = input[i].ToString();
+                        signs[1, numberOfSigns] = i.ToString();
+                        numberOfSigns++;
+                    }
+                }
+            }
+            SortOperators();
+        }
+
+        private void GetOperators(string input, string opToIgnore)
+        {
+            numberOfSigns = 0;
+            Array.Clear(signs);
+            for (int i = 1; i < input.Length; i++)
+            {
+                if (IsThisAnOperator(input[i]) && input[i].ToString() != opToIgnore)
+                {
+                    if ((input[i].ToString() != "-" && input[i].ToString() != "=" && IsThisAParentese(input[i]) == false) ||
+                        (input[i].ToString() == "-" && IsThisAnOperator(input[i - 1]) == false)) ; //dont add - to operator list if it represnts a negative number
                     {
                         signs[0, numberOfSigns] = input[i].ToString();
                         signs[1, numberOfSigns] = i.ToString();
@@ -448,17 +468,15 @@ namespace Dynamic_Calculator
                         addSubtract[1, numberOfAddSubtract] = i.ToString();
                         numberOfAddSubtract++;
                         break;
-
                 }
             }
         }
-
 
         /******************************************************************************************
          *                             Methods that process string portions
          ******************************************************************************************/
         //A work in progress. Currently can have index out of bounds exception when parenteses are used
-        private string EvaluateExpression2(string input, bool parentesesPortion)
+        private string EvaluateExpression(string input, bool parentesesPortion)
         {
             input = RefreshStringData(input);
             int loopLimit = 0;
@@ -525,7 +543,6 @@ namespace Dynamic_Calculator
             }
             return input;
         }
-
 
         //if exponent calculation, b should be the exponent
         private double DoMath(double a, double b, string op)
@@ -714,7 +731,6 @@ namespace Dynamic_Calculator
             }
         }
 
-
         //split equation into two strings based on position of Equals
         private string InitialProcessEquation(string input)
         {
@@ -803,28 +819,58 @@ namespace Dynamic_Calculator
             return input;
         }
 
+        
+
         private string SeparateTerm(string term)
         {
             string number = "";
             string exp = "";
             string letter = "";
             bool firstNumber = false;
+            bool letterPresent = false;
             bool exponent = false;
             foreach (char character in term)
             {
-                if (firstNumber)
+                if(IsThisADigit(character))
                 {
-                    exp = IsThisADigit(character) ? exp += character : number;
-                }
-                else
+                    if (!exponent)
+                    {
+                        number += character;
+                        firstNumber = true;
+                    }
+                    else
+                    {
+                        exp += character;
+                    }                        
+                }else if (IsThisALetter(character))
                 {
-                    number = IsThisADigit(character) ? number += character : number;
-                }
-                letter = IsThisALetter(character) ? letter += character : letter;
-                firstNumber = letter != "" ? true : false;
-                exponent = IsThisAnExponent(character) ? true : exponent;
+                    letter += character;
+                    letterPresent = true;
+                }else if (IsThisAnExponent(character))
+                {
+                    exponent = true;
+                }      
             }
-            term = exponent ? number + "," + letter + "," + exp : number + "," + letter;
+            if(firstNumber && letterPresent && exponent)
+            {
+                term = number + "," + letter + "," + exp;
+            }else if(!firstNumber && letterPresent && exponent)
+            {
+                term = letter + "," + exp;
+            }else if(firstNumber && !letterPresent && exponent)
+            {
+                term = DoMath(double.Parse(number), double.Parse(exp), "^").ToString();
+            }else if(firstNumber && letterPresent && !exponent)
+            {
+                term = number + "," + letter;
+            }else if(firstNumber && !letterPresent && !exponent)
+            {
+                term = number;
+            }else if(!firstNumber && letterPresent && !exponent)
+            {
+                term = letter;
+            }
+            MessageBox.Show(term);
             return term;
         }
 
@@ -897,25 +943,187 @@ namespace Dynamic_Calculator
             }
             return op;
         }
-
+        //fix interpreting order
         private string DistributeFactor(string mult1, string mult2)
         {
+            string[] newTerms = new string[20];
             string sep = SeparateTerm(mult1);
             string[] separated = sep.Split(",");
-            double numberFactor = double.Parse(separated[0]);
-            string letterFactor = separated[1];
+            double numberFactor = 0;
+            string letterFactor = "";
+            bool firstNumExp = false;
+            double exp = 0;
+
+            switch (separated.Length)
+            {
+                case 1:
+                    if (IsThisADigit(separated[0][0]))
+                    {
+                        numberFactor = double.Parse(separated[0]);
+                    }
+                    else if (IsThisALetter(separated[0][0]))
+                    {
+                        letterFactor = separated[0];
+                        numberFactor = 1;
+                    }
+                    break;
+                case 2:
+                    if (IsThisADigit(separated[0][0]))
+                    {
+                        numberFactor = double.Parse(separated[0]);
+                        if (IsThisALetter(separated[1][0]))
+                        {
+                            letterFactor = separated[1];
+                        }
+                        else
+                        {
+                            exp = double.Parse(separated[1]);
+                            firstNumExp = true;
+                        }
+                    }
+                    else if (IsThisALetter(separated[0][0]))
+                    {
+                        letterFactor = separated[0];
+                        exp = double.Parse(separated[1]);
+                        firstNumExp = true;
+                        numberFactor = 1;
+                    }
+                    break;
+                case 3:
+                    numberFactor = double.Parse(separated[0]);
+                    letterFactor = separated[1];
+                    exp = double.Parse(separated[2]);
+                    firstNumExp = true;
+                    break;
+            }
+            
 
             GetTerms(mult2);
-            GetOperators(mult2);
+            GetOperators(mult2, "^");
 
             string result = "";
+            for(int i = 0; i < numberOfTerms; i++)
+            {
+                //memory for second term's components
+                double secondNumberFactor = 0;
+                double secondExp = 0;
+                string secondLetterFactor = "";
+                bool secondNumExp = false;
+
+                //memory for multiplied term's components
+                double newNumber = 0;
+                string newExp = "";
+                string newLetter = "";
+                string newTerm = "";
+
+                terms[0, i] = SeparateTerm(terms[0, i]);
+                string[] secondSeparated = terms[0, i].Split(",");
+                switch (secondSeparated.Length)
+                {
+                    case 1:
+                        if (IsThisADigit(secondSeparated[0][0]))
+                        {
+                            secondNumberFactor = double.Parse(secondSeparated[0]);
+                        }
+                        else if (IsThisALetter(secondSeparated[0][0]))
+                        {
+                            secondLetterFactor = secondSeparated[0];
+                            secondNumberFactor = 1;
+                        }
+                        break;
+                    case 2:
+                        if (IsThisADigit(secondSeparated[0][0]))
+                        {
+                            secondNumberFactor = double.Parse(secondSeparated[0]);
+                            if (IsThisALetter(secondSeparated[1][0]))
+                            {
+                                secondLetterFactor = secondSeparated[1];
+                            }
+                            else
+                            {
+                                secondExp = double.Parse(secondSeparated[1]);
+                                secondNumExp = true;
+                            }
+                        }
+                        else if (IsThisALetter(secondSeparated[0][0]))
+                        {
+                            secondLetterFactor = secondSeparated[0];
+                            secondExp = double.Parse(secondSeparated[1]);
+                            secondNumExp = true;
+                            secondNumberFactor = 1;
+                        }
+                        break;
+                    case 3:
+                        secondNumberFactor = double.Parse(secondSeparated[0]);
+                        secondLetterFactor = secondSeparated[1];
+                        secondExp = double.Parse(secondSeparated[2]);
+                        secondNumExp = true;
+                        break;
+                }
+
+                if(exp == 0)
+                {
+                    letterFactor = "";
+                    firstNumExp = false;
+                }
+                if(secondExp == 0)
+                {
+                    secondLetterFactor = "";
+                    secondNumExp = false;
+                }
+
+                newLetter = letterFactor == secondLetterFactor ? letterFactor : letterFactor + secondLetterFactor;
+                newNumber = DoMath(numberFactor, secondNumberFactor, "*");
+                if(newNumber == 0)
+                {
+                    newTerm = "0";
+                    
+                }
+                else if(newNumber == 1)
+                {
+                    newTerm = newLetter;
+                }
+                else
+                {
+                    newTerm = newNumber + newLetter;
+                }
+                if(firstNumExp && secondNumExp)
+                {
+                    newExp = "^" + DoMath(exp, secondExp, "+").ToString();
+                }
+                else if(firstNumExp && !secondNumExp)
+                {
+                    newExp = "^" + firstNumExp.ToString();
+                }else if(!firstNumExp && secondNumExp)
+                {
+                    newExp = "^" + secondNumExp.ToString();
+                }
+                else
+                {
+                    newExp = "";
+                }
+                newTerm = newTerm + newExp;
+                newTerms[i] = newTerm;
+                MessageBox.Show(newTerm);
+
+            }
+            for(int j = 0; j < numberOfTerms; j++)
+            {
+                result = j != numberOfTerms - 1 ? result += newTerms[j] + signs[0, j] : result += newTerms[j];
+            }
             return result;
+        }
+
+        private string DetermineTermComponents(string input, int length)
+        {
+
+            return input;
         }
 
         private void btnTest_Click(object sender, EventArgs e)
         {
-            string test = RefreshStringData("2+(9*2)");
-            MessageBox.Show(parenteses[0, 0].ToString() + " " + parenteses[0, 1].ToString() + "\n " + numbers[0, 0].ToString() + "\n " + numberOfNegatives.ToString());
+            string test = DistributeFactor("a^7", "22a^2");
+           
         }
 
         
