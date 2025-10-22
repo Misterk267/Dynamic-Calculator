@@ -55,7 +55,7 @@ namespace Dynamic_Calculator
         */
         private void Form1_Load(object sender, EventArgs e)
         {
-            this.Size = new Size(418, 482);
+            this.Size = new Size(473, 466);
         }
 
         private void btnProcess_Click(object sender, EventArgs e)
@@ -127,7 +127,7 @@ namespace Dynamic_Calculator
             {
                 solveMode = false;
             }
-            lstHistory.Items.Add("Initial Input: " + input);
+            lstHistory.Items.Add("Initial Input: ".PadRight(15) + "|  " + input);
             return input;
         }
 
@@ -232,7 +232,7 @@ namespace Dynamic_Calculator
                     input = parenteses[0, i + 1] == input.Length - 1 ? input.Substring(0, parenteses[0, i]) + value.ToString() :
                         input.Substring(0, parenteses[0, i]) + value.ToString() + input.Substring(parenteses[0, i + 1] + 1);
                     input = RefreshStringData(input);
-                    lstHistory.Items.Add(input);
+                    lstHistory.Items.Add("Expression: ".PadRight(15) + "|  " + input);
                     i = 0; //restart loop every time we process a set of parenteses. This is to deal with nested Parenteses.
                 }
                 else
@@ -472,10 +472,34 @@ namespace Dynamic_Calculator
             }
         }
 
+        private string OperatorToText(string op)
+        {
+            string opText = "";
+            switch (op)
+            {
+                case "^":
+                    opText = "Exponent: ";
+                    break;
+                case "*":
+                    opText = "Multiply: ";
+                    break;
+                case "/":
+                    opText = "Divide: ";
+                    break;
+                case "+":
+                    opText = "Add: ";
+                    break;
+                case "-":
+                    opText = "Subtract: ";
+                    break;
+            }
+            return opText;
+        }
+
         /******************************************************************************************
          *                             Methods that process string portions
          ******************************************************************************************/
-        //A work in progress. Currently can have index out of bounds exception when parenteses are used
+
         private string EvaluateExpression(string input, bool parentesesPortion)
         {
             input = RefreshStringData(input);
@@ -530,8 +554,9 @@ namespace Dynamic_Calculator
                         input.Substring(0, aIndex) + result + input.Substring(bIndex + bL);
                     }
                     input = RefreshStringData(input); //refresh for next loop iteration
-                    string label = numberOfSigns > 0 ? "Expression: " : "Answer: ";
-                    string mem = parentesesPortion ? "Parenteses: " + Parenteses + " = " + input : label + input;
+
+                    //prepare output labels
+                    string mem = parentesesPortion ? "Parenteses: ".PadRight(15) + "|  " + Parenteses + " = " + input : OperatorToText(op).PadRight(15) + "|  " + input;
 
                     if (input != previous && numberOfParenteses < 2)
                     {
@@ -812,14 +837,18 @@ namespace Dynamic_Calculator
             return input;
         }
 
+        private void DetectParentesesMultiplication(string input)
+        {
+
+
+        }
+
         private string SimplifyExpression(string input)
         {
             input = RefreshEquationData(input);
 
             return input;
         }
-
-        
 
         private string SeparateTerm(string term)
         {
@@ -856,21 +885,20 @@ namespace Dynamic_Calculator
                 term = number + "," + letter + "," + exp;
             }else if(!firstNumber && letterPresent && exponent)
             {
-                term = letter + "," + exp;
+                term = "1," + letter + "," + exp;
             }else if(firstNumber && !letterPresent && exponent)
             {
-                term = DoMath(double.Parse(number), double.Parse(exp), "^").ToString();
+                term = DoMath(double.Parse(number), double.Parse(exp), "^").ToString() + ", ,1";
             }else if(firstNumber && letterPresent && !exponent)
             {
-                term = number + "," + letter;
+                term = number + "," + letter + ",1";
             }else if(firstNumber && !letterPresent && !exponent)
             {
-                term = number;
+                term = number + ", ," + "1";
             }else if(!firstNumber && letterPresent && !exponent)
             {
-                term = letter;
+                term = "1," + letter + ",1";
             }
-            MessageBox.Show(term);
             return term;
         }
 
@@ -908,10 +936,6 @@ namespace Dynamic_Calculator
 
         private void solve(string input)
         {
-            string[] sections;
-            input = InitialProcessEquation(input);
-            sections = input.Split("=");
-
 
         }
 
@@ -921,211 +945,161 @@ namespace Dynamic_Calculator
             return input;
         }
 
-        private string InvertOperation(string op)
-        {
-            switch (op)
-            {
-                case "+":
-                    op = "-";
-                    break;
-                case "-":
-                    op = "+";
-                    break;
-                case "*":
-                    op = "/";
-                    break;
-                case "/":
-                    op = "*";
-                    break;
-                case "^":
-                    op = "^";
-                    break;
-            }
-            return op;
-        }
-        //fix interpreting order
         private string DistributeFactor(string mult1, string mult2)
         {
+            //memory allocation for result terms
             string[] newTerms = new string[20];
-            string sep = SeparateTerm(mult1);
-            string[] separated = sep.Split(",");
-            double numberFactor = 0;
-            string letterFactor = "";
-            bool firstNumExp = false;
-            double exp = 0;
 
-            switch (separated.Length)
-            {
-                case 1:
-                    if (IsThisADigit(separated[0][0]))
-                    {
-                        numberFactor = double.Parse(separated[0]);
-                    }
-                    else if (IsThisALetter(separated[0][0]))
-                    {
-                        letterFactor = separated[0];
-                        numberFactor = 1;
-                    }
-                    break;
-                case 2:
-                    if (IsThisADigit(separated[0][0]))
-                    {
-                        numberFactor = double.Parse(separated[0]);
-                        if (IsThisALetter(separated[1][0]))
-                        {
-                            letterFactor = separated[1];
-                        }
-                        else
-                        {
-                            exp = double.Parse(separated[1]);
-                            firstNumExp = true;
-                        }
-                    }
-                    else if (IsThisALetter(separated[0][0]))
-                    {
-                        letterFactor = separated[0];
-                        exp = double.Parse(separated[1]);
-                        firstNumExp = true;
-                        numberFactor = 1;
-                    }
-                    break;
-                case 3:
-                    numberFactor = double.Parse(separated[0]);
-                    letterFactor = separated[1];
-                    exp = double.Parse(separated[2]);
-                    firstNumExp = true;
-                    break;
-            }
-            
+            //populate storage for first string
+            GetTerms(mult1);
+            string[,] termStorage = terms;
+            int termNumber = numberOfTerms;
+            GetOperators(mult1, "^");
+            string[,] opStorage = signs;
+            int opNumber = numberOfSigns;
 
+            //populate class arrays for second string
             GetTerms(mult2);
             GetOperators(mult2, "^");
 
+            //storage for term processing
+            string firstTerm;
             string result = "";
-            for(int i = 0; i < numberOfTerms; i++)
+
+            for (int j = 0; j < termNumber; j++)
             {
-                //memory for second term's components
-                double secondNumberFactor = 0;
-                double secondExp = 0;
-                string secondLetterFactor = "";
-                bool secondNumExp = false;
+                firstTerm = termStorage[0, j];
 
-                //memory for multiplied term's components
-                double newNumber = 0;
-                string newExp = "";
-                string newLetter = "";
-                string newTerm = "";
-
-                terms[0, i] = SeparateTerm(terms[0, i]);
-                string[] secondSeparated = terms[0, i].Split(",");
-                switch (secondSeparated.Length)
+                for (int i = 0; i < numberOfTerms; i++)
                 {
-                    case 1:
-                        if (IsThisADigit(secondSeparated[0][0]))
-                        {
-                            secondNumberFactor = double.Parse(secondSeparated[0]);
-                        }
-                        else if (IsThisALetter(secondSeparated[0][0]))
-                        {
-                            secondLetterFactor = secondSeparated[0];
-                            secondNumberFactor = 1;
-                        }
-                        break;
-                    case 2:
-                        if (IsThisADigit(secondSeparated[0][0]))
-                        {
-                            secondNumberFactor = double.Parse(secondSeparated[0]);
-                            if (IsThisALetter(secondSeparated[1][0]))
-                            {
-                                secondLetterFactor = secondSeparated[1];
-                            }
-                            else
-                            {
-                                secondExp = double.Parse(secondSeparated[1]);
-                                secondNumExp = true;
-                            }
-                        }
-                        else if (IsThisALetter(secondSeparated[0][0]))
-                        {
-                            secondLetterFactor = secondSeparated[0];
-                            secondExp = double.Parse(secondSeparated[1]);
-                            secondNumExp = true;
-                            secondNumberFactor = 1;
-                        }
-                        break;
-                    case 3:
-                        secondNumberFactor = double.Parse(secondSeparated[0]);
-                        secondLetterFactor = secondSeparated[1];
-                        secondExp = double.Parse(secondSeparated[2]);
-                        secondNumExp = true;
-                        break;
+                    string secondTerm = terms[0, i];
+                    result = i != numberOfTerms - 1 ? result += MultiplyTerms(firstTerm, secondTerm) + signs[0, i] :
+                        result += MultiplyTerms(firstTerm, secondTerm);
                 }
 
-                if(exp == 0)
-                {
-                    letterFactor = "";
-                    firstNumExp = false;
-                }
-                if(secondExp == 0)
-                {
-                    secondLetterFactor = "";
-                    secondNumExp = false;
-                }
-
-                newLetter = letterFactor == secondLetterFactor ? letterFactor : letterFactor + secondLetterFactor;
-                newNumber = DoMath(numberFactor, secondNumberFactor, "*");
-                if(newNumber == 0)
-                {
-                    newTerm = "0";
-                    
-                }
-                else if(newNumber == 1)
-                {
-                    newTerm = newLetter;
-                }
-                else
-                {
-                    newTerm = newNumber + newLetter;
-                }
-                if(firstNumExp && secondNumExp)
-                {
-                    newExp = "^" + DoMath(exp, secondExp, "+").ToString();
-                }
-                else if(firstNumExp && !secondNumExp)
-                {
-                    newExp = "^" + firstNumExp.ToString();
-                }else if(!firstNumExp && secondNumExp)
-                {
-                    newExp = "^" + secondNumExp.ToString();
-                }
-                else
-                {
-                    newExp = "";
-                }
-                newTerm = newTerm + newExp;
-                newTerms[i] = newTerm;
-                MessageBox.Show(newTerm);
-
+                result = j < termStorage.Length - 1 ? result += opStorage[0, j] : result; //avoid trying to add operator that doesn't exist
             }
-            for(int j = 0; j < numberOfTerms; j++)
+
+            MessageBox.Show(result);
+            return result;
+        }
+
+        //this is not returning correct values
+        private string MultiplyTerms(string factor1, string factor2)
+        {
+            //create memory for new term
+            string newNumber = "";
+            string newLetter = "";
+            string newExp = "";
+            string newTerm = "";
+
+            //get details of first term
+            string[] first = SeparateTerm(factor1).Split(",");
+            string firstNumber = first[0];
+            string firstLetter = first[1];
+            string firstExp = first[2];
+
+            //get details of second term
+            string[] second = SeparateTerm(factor2).Split(",");
+            string secondNumber = second[0];
+            string secondLetter = second[1];  
+            string secondExp = second[2];
+
+            //account for exponents of 0 changing details of operation
+            if (double.Parse(firstExp) == 0)
             {
-                result = j != numberOfTerms - 1 ? result += newTerms[j] + signs[0, j] : result += newTerms[j];
+                firstExp = "1";
+                firstLetter = "";
+                firstNumber = "1";
+            }
+            if (double.Parse(secondExp) == 0)
+            {
+                secondExp = "1";
+                secondLetter = "";
+                secondNumber = "1";
+            }
+
+            //construct new term
+            newLetter = firstLetter == secondLetter ? firstLetter : firstLetter + secondLetter;
+            newNumber = DoMath(double.Parse(firstNumber), double.Parse(secondNumber), "*").ToString();
+
+            //deal with speical cases of number value
+            if (double.Parse(newNumber) == 0)
+            {
+                newTerm = "0";
+            }
+            else if (double.Parse(newNumber) == 1)
+            {
+                newTerm = newLetter;
+            }
+            else
+            {
+                newTerm = newNumber + newLetter;
+            }
+
+            //deal with exponents and get new exponent value and add to term
+            if (firstExp != "" && secondExp != "")
+            {
+                newExp = "^" + DoMath(double.Parse(firstExp), double.Parse(secondExp), "+").ToString();
+            }
+            else if (firstExp != "" && secondExp == "")
+            {
+                newExp = "^" + firstExp.ToString();
+            }
+            else if (firstExp == "" && secondExp != "")
+            {
+                newExp = "^" + secondExp.ToString();
+            }
+            else
+            {
+                newExp = "";
+            }
+            newTerm = newTerm != "0" ? newTerm + newExp : newTerm;
+            MessageBox.Show(newTerm);
+            return newTerm;
+        }
+
+        public string AddSubTerms(string term1, string term2, bool areAdding)
+        {
+            //getting information
+            string result = "";
+            string[] first = SeparateTerm(term1).Split(",");
+            string[] second = SeparateTerm(term2).Split(",");
+            string exp = "";
+
+            if (areAdding)
+            {
+                result = first[1] == second[1] ? (double.Parse(first[0]) + double.Parse(second[0])).ToString() : result;
+                exp = first[2] == second[2] ? first[2] : exp;
+                if(result != "" && exp != "")
+                {
+                    result += exp;
+                }
+                else
+                {
+                    result = term1 + "+" + term2;
+                }
+            }
+            else
+            {
+                result = first[1] == second[1] ? (double.Parse(first[0]) - double.Parse(second[0])).ToString() : result;
+                exp = first[2] == second[2] ? first[2] : exp;
+                if (result != "" && exp != "")
+                {
+                    result += exp;
+                }
+                else
+                {
+                    result = term1 + "-" + term2;
+                }
             }
             return result;
         }
 
-        private string DetermineTermComponents(string input, int length)
-        {
-
-            return input;
-        }
-
         private void btnTest_Click(object sender, EventArgs e)
         {
-            string test = DistributeFactor("a^7", "22a^2");
+            string test = MultiplyTerms("a^7", "22a^2");
            
         }
-
-        
     }
 }
