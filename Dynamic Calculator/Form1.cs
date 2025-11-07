@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using static System.Collections.Specialized.BitVector32;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -69,7 +70,7 @@ namespace Dynamic_Calculator
                 string processedInput = InitialProcessInput(input); //string cleanup
                 if (solveMode == true)
                 {
-                    solve(processedInput);
+                    //do stuff here
                 }
                 else
                 {
@@ -723,6 +724,99 @@ namespace Dynamic_Calculator
             }
         }
 
+        //test this next
+        private string EquationSorter(string input)
+        {
+            input = InitialProcessEquation(input);
+            string[] sep = input.Split("=");
+            string[] combined = SortEquationPortion(sep[0], sep[1], false);
+            combined = SortEquationPortion(combined[0], combined[1], true);
+            combined[0] = SortLikeTerms(combined[0]);
+            combined[0] = SimplifyExpression(combined[0]);
+            combined[1] = EvaluateExpression(combined[1], false);
+            string sorted = combined[0] + "=" + combined[1];
+            return sorted;
+        }
+
+        public string[] SortEquationPortion(string part1, string part2, bool secondRun)
+        {
+            string mem = "";
+            if (secondRun)
+            {
+                mem = part2;
+                part2 = part1;
+                part1 = mem;
+            }
+            GetOperators(part1, "^"); //populate number of signs var once before loop start
+
+            //put all variable terms on left side
+            for (int i = 0; i < numberOfSigns; i++)
+            {
+                GetTerms(part1);
+                GetOperators(part1, "^");
+                GetNegativeTerms(part1);
+
+                string term = terms[0, i];
+                string firstop = negatives[0] == int.Parse(terms[1, i]) ? "-" : "+";
+                string op = i == 0 ? firstop : signs[0, i - 1];
+                if (ContainsVariable(term) == secondRun)
+                {
+                    op = ReverseOp(op);
+                    string newTerm = op + term;
+                    part2 += newTerm;
+                    if (i == 0)
+                    {
+                        part1 = part1.Substring(int.Parse(terms[1, i + 1]));
+                    }
+                    else if (i == numberOfSigns - 1)
+                    {
+                        part1 = part1.Substring(0, int.Parse(signs[1, i]));
+                    }
+                    else
+                    {
+                        part1 = part1.Substring(0, int.Parse(signs[1, i])) + part1.Substring(int.Parse(terms[0, i]) + term.Length);
+                    }
+                }
+            }
+            string[] output = { part1, part2 };
+            return output;
+        }
+
+        private string ReverseOp(string op)
+        {
+            switch (op.Trim())
+            {
+                case "+":
+                    op = "-";
+                    break;
+                case "-":
+                    op = "+";
+                    break;
+                case "^":
+                    op = "^";
+                    break;
+                case "*":
+                    op = "/";
+                    break;
+                case "/":
+                    op = "*";
+                    break;
+            }
+            return op;
+        }
+
+        private bool ContainsVariable(string term)
+        {
+            bool isVar = false;
+            for (int i = 0; i < term.Length; i++)
+            {
+                if (IsThisALetter(term[i]))
+                {
+                    isVar = true;
+                }
+            }
+            return isVar;
+        }
         private void GetTerms(string input)
         {
             Array.Clear(terms);
@@ -843,10 +937,98 @@ namespace Dynamic_Calculator
 
         }
 
+        //fix this
         private string SimplifyExpression(string input)
         {
-            input = RefreshEquationData(input);
-
+            GetTerms(input);
+            GetOperators(input, "^");
+            GetNegativeTerms(input);
+            string result = "";
+            string prev = "";
+            for(int j = 0; j < numberOfMultDiv; j++)
+            {
+                if(prev == input)
+                {
+                    j++;
+                    if(j >= numberOfMultDiv)
+                    {
+                        break;
+                    }
+                }
+                prev = input;
+                switch (multDiv[0, j])
+                {
+                    case "*":
+                        result = MultiplyTerms(terms[0, j], terms[0, j + 1]);
+                        break;
+                    case "/":
+                        result = DivideTerms(terms[0, j], terms[0, j + 1]);
+                        break;
+                }
+                if(numberOfTerms > 2)
+                {
+                    if (int.Parse(terms[1, j + 1]) + terms[1, j + 1].Length > input.Length)
+                    {
+                        input = input.Substring(0, int.Parse(terms[1, j])) + result;
+                    }
+                    else
+                    {
+                        input = input.Substring(0, int.Parse(terms[1, j])) + result + input.Substring(int.Parse(terms[1, j + 1]) + terms[0, j + 1].Length);
+                    }
+                }
+                else
+                {
+                    input = result;
+                }
+                GetTerms(input);
+                GetOperators(input, "^");
+                GetNegativeTerms(input);
+                j--;
+            }
+            GetTerms(input);
+            GetOperators(input, "^");
+            GetNegativeTerms(input);
+            int operations = numberOfAddSubtract;
+            for (int i = 0; i < operations; i++)
+            {
+                if (prev == input)
+                {
+                    i++; //skip inoperable terms (Different bases or exponents, etc.)
+                    if (i >= numberOfMultDiv)
+                    {
+                        break;
+                    }
+                }
+                prev = input;
+                switch (addSubtract[0, i])
+                {
+                    case "+":
+                        result = AddSubTerms(terms[0, i], terms[0, i + 1], true);
+                        break;
+                    case "-":
+                        result = AddSubTerms(terms[0, i], terms[0, i + 1], false);
+                        break;
+                }
+                if(numberOfTerms > 2)
+                {
+                    if (int.Parse(terms[1, i + 1]) + terms[1, i + 1].Length > input.Length)
+                    {
+                        input = input.Substring(0, int.Parse(terms[1, i])) + result;
+                    }
+                    else
+                    {
+                        input = input.Substring(0, int.Parse(terms[1, i])) + result + input.Substring(int.Parse(terms[1, i + 1]) + terms[0, i + 1].Length);
+                    }                
+                }
+                else
+                {
+                    input = result;
+                }
+                GetTerms(input);
+                GetOperators(input, "^");
+                GetNegativeTerms(input);
+                i--;
+            }
             return input;
         }
 
@@ -934,10 +1116,6 @@ namespace Dynamic_Calculator
             return a;
         }
 
-        private void solve(string input)
-        {
-
-        }
 
         private string RefreshEquationData(string input)
         {
@@ -984,7 +1162,6 @@ namespace Dynamic_Calculator
             return result;
         }
 
-        //this is not returning correct values
         private string MultiplyTerms(string factor1, string factor2)
         {
             //create memory for new term
@@ -1059,6 +1236,13 @@ namespace Dynamic_Calculator
             return newTerm;
         }
 
+        private string DivideTerms(string term1, string term2)
+        {
+            string result = "";
+            //stuff goes here
+            return result;
+        }
+
         public string AddSubTerms(string term1, string term2, bool areAdding)
         {
             //getting information
@@ -1069,11 +1253,15 @@ namespace Dynamic_Calculator
 
             if (areAdding)
             {
-                result = first[1] == second[1] ? (double.Parse(first[0]) + double.Parse(second[0])).ToString() : result;
+                result = first[1] == second[1] && first[2] == second[2] ? (double.Parse(first[0]) + double.Parse(second[0])).ToString() : result;               
                 exp = first[2] == second[2] ? first[2] : exp;
+                if (IsThisALetter(first[1][0]))
+                {
+                    result += first[1];
+                }
                 if(result != "" && exp != "")
                 {
-                    result += exp;
+                    result = first[2] != "1" ? result += exp : result;
                 }
                 else
                 {
@@ -1084,9 +1272,13 @@ namespace Dynamic_Calculator
             {
                 result = first[1] == second[1] ? (double.Parse(first[0]) - double.Parse(second[0])).ToString() : result;
                 exp = first[2] == second[2] ? first[2] : exp;
+                if (IsThisALetter(first[1][0]))
+                {
+                    result += first[1];
+                }
                 if (result != "" && exp != "")
                 {
-                    result += exp;
+                    result = first[2] != "1" ? result += exp : result;
                 }
                 else
                 {
@@ -1096,9 +1288,99 @@ namespace Dynamic_Calculator
             return result;
         }
 
+        //this should relocate addable/subbable terms to be adjacent if they have the same base
+        //needs testing
+        private string SortLikeTerms(string input)
+        {
+            if (!IsThisAnOperator(input[0]) || input[0].ToString() != "-")
+            {
+                input = "+" + input;
+            }
+
+            string numLetExpPattern = @"[+\-]?[0-9]+[a-zA-Z]\^[0-9]+";
+            string letExpPattern = @"[+\-]?[^0-9][a-zA-Z]\^[0-9]+";
+            string letterPattern = @"[+\-]?[^0-9][a-zA-Z][^\^][0-9]+";
+            string numLetPattern = @"[+\-]?[0-9]+[a-zA-Z][^\^][0-9]+";
+            string numPattern = @"[0-9]+";
+            
+            Regex letter = new Regex(letterPattern);
+            Regex numLet = new Regex(numLetPattern);
+            Regex numLetExp = new Regex(numLetExpPattern);
+            Regex letExp = new Regex(letExpPattern);
+            Regex num = new Regex(numPattern);
+
+            GetTerms(input);
+
+            string mem = "";
+            List<string> termStorage = new List<string>();
+
+            //this is inefficient, will be fixed after migration of program logic to use lists instead of arrays
+            for(int j = 0; j < numberOfTerms; j++)
+            {
+                termStorage.Add(terms[0, j]);
+            }
+
+            int loops = numberOfTerms;
+            for(int i = 0; i < loops; i++)
+            {
+                Match match1 = numLetExp.Match(terms[0, i]);
+                if (match1.Success)
+                {
+                    mem += match1.ToString();
+                    termStorage.Remove(match1.ToString());
+                    i--;
+                    loops--;
+                    continue;
+                }
+                Match match2 = letExp.Match(terms[0, i]);
+                if (match2.Success)
+                {
+                    mem += match2.ToString();
+                    termStorage.Remove(match2.ToString());
+                    i--;
+                    loops--;
+                    continue;
+                }
+                Match match3 = numLet.Match(terms[0, i]);
+                if (match3.Success)
+                {
+                    mem += match3.ToString();
+                    termStorage.Remove(match3.ToString());
+                    i--;
+                    loops--;
+                    continue;
+                }
+                Match match4 = letter.Match(terms[0, i]);
+                if (match4.Success)
+                {
+                    mem += match4.ToString();
+                    termStorage.Remove(match4.ToString());
+                    i--;
+                    loops--;
+                    continue;
+                }
+                Match match5 = num.Match(terms[0, i]);
+                if (match5.Success)
+                {
+                    mem += match5.ToString();
+                    termStorage.Remove(match5.ToString());
+                    i--;
+                    loops--;
+                    continue;
+                }
+            }
+            if (IsThisAnOperator(mem[0]) && mem[0].ToString() != "-")
+            {
+                mem = mem.Substring(1);
+            }
+            return mem;
+        }
+
         private void btnTest_Click(object sender, EventArgs e)
         {
-            string test = MultiplyTerms("a^7", "22a^2");
+            string test = SortLikeTerms("3x*7x-2x-1+2x^2");
+            //string test = AddSubTerms("3x", "7x", false);
+            MessageBox.Show(test);
            
         }
     }
